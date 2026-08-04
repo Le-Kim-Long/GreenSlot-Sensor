@@ -6,160 +6,178 @@ import requests
 import serial
 import serial.tools.list_ports
 
-# ==============================================================================
-# CONFIGURATION: ENVIRONMENT VARIABLES OR MANUAL CONFIG
-# ==============================================================================
-# IF RUNNING ON A REMOTE LAPTOP/PI, REPLACE 'localhost' WITH THE SERVER IPv4/DOMAIN
-BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:8080/api/iot/device/data')
-API_KEY = os.getenv('IOT_API_KEY', 'default_iot_key_for_dev_only')
-DEVICE_ID = os.getenv('DEVICE_ID', 'arduino-greenhouse-01')
-BAUD_RATE = int(os.getenv('BAUD_RATE', 9600))
+# ==========================================
+# 1. CẤU HÌNH API VÀ THIẾT BỊ
+# ==========================================
+BACKEND_LOGIN_URL = 'http://localhost:8080/api/auth/login' 
+BACKEND_SENSOR_URL = 'http://localhost:8080/api/iot/sensors/data'
+BACKEND_PUMP_URL = 'http://localhost:8080/api/iot/pump/status' 
+
+API_KEY = 'default_iot_key_for_dev_only' 
+DEVICE_ID = 'arduino-greenhouse-01'
+BAUD_RATE = 9600
+
+# TÀI KHOẢN ĐĂNG NHẬP
+IOT_USERNAME = 'garden_staff' 
+IOT_PASSWORD = 'Staff@123'
 
 HEADERS = {
     'Content-Type': 'application/json',
-    'X-IoT-Api-Key': API_KEY
+    'X-IoT-Api-Key': API_KEY,
+    'Authorization': '' 
 }
-# ==============================================================================
 
-
-def find_arduino_port():
-    """Scan available serial ports for common Arduino hardware identifiers."""
-    identifiers = ['arduino', 'ch340', 'cp210', 'uart', 'ftdi', 'usb serial']
-    ports = list(serial.tools.list_ports.comports())
-
-    if not ports:
+# ==========================================
+# 2. CÁC HÀM HỖ TRỢ
+# ==========================================
+def get_jwt_token():
+    print(f"[AUTH] Đang gửi yêu cầu đăng nhập lên hệ thống...")
+    payload = {
+        "username": IOT_USERNAME,
+        "password": IOT_PASSWORD
+    }
+    try:
+        response = requests.post(BACKEND_LOGIN_URL, json=payload, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            token = data.get("token") or data.get("accessToken")
+            if token:
+                print("✅ [AUTH] Đã lấy JWT Token tự động thành công!")
+                return token
+            else:
+                print("❌ [LỖI AUTH] Không tìm thấy trường token trong phản hồi.")
+                return None
+        else:
+            print(f"❌ [LỖI AUTH] Đăng nhập thất bại: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"❌ [LỖI MẠNG] Không thể kết nối API Đăng nhập: {e}")
         return None
 
-    # Priority 1: Match common Arduino/USB-Serial identifiers in description or hwid
-    for port in ports:
-        desc_lower = (port.description or '').lower()
-        hwid_lower = (port.hwid or '').lower()
-        if any(ident in desc_lower or ident in hwid_lower for ident in identifiers):
-            print(f"[AUTO-DETECT] Found likely Arduino device on {port.device} ({port.description})")
-            return port.device
-
-    # Priority 2: Fallback to the first active USB COM port if available
-    for port in ports:
-        if 'usb' in (port.description or '').lower() or 'usb' in (port.hwid or '').lower():
-            print(f"[AUTO-DETECT] Fallback to USB COM port {port.device} ({port.description})")
-            return port.device
-
+def find_arduino():
+    ports = list(serial.tools.list_ports.comports())
+    for p in ports:
+        if 'usb' in (p.description or '').lower() or 'arduino' in (p.description or '').lower():
+            return p.device
     return None
 
-
-def create_serial_connection(port, baud_rate):
-    """Attempt to connect to the specified serial port."""
-    try:
-        connection = serial.Serial(port, baud_rate, timeout=1)
-        print(f"[INFO] Successfully connected to {port} at {baud_rate} baud.")
-        return connection
-    except serial.SerialException as e:
-        print(f"[ERROR] Serial connection failed on {port}: {e}")
-        return None
-
-
-def forward_to_backend(payload):
-    """POST transformed telemetry payload to Spring Boot backend."""
-    try:
-        response = requests.post(
-            BACKEND_URL,
-            json=payload,
-            headers=HEADERS,
-            timeout=5.0
-        )
-        if response.status_code == 200:
-            print(f"[SUCCESS] POST {BACKEND_URL} -> Status: {response.status_code} | Response: {response.text}")
-        else:
-            print(f"[WARNING] Backend returned status {response.status_code}: {response.text}")
-    except requests.exceptions.Timeout:
-        print(f"[ERROR] Request timeout when connecting to {BACKEND_URL}")
-    except requests.exceptions.ConnectionError:
-        print(f"[ERROR] Connection failed. Is Spring Boot reachable at {BACKEND_URL}?")
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] HTTP request error: {e}")
-
-
+# ==========================================
+# 3. CHƯƠNG TRÌNH CHÍNH (MAIN LOOP)
+# ==========================================
 def main():
-    print("======================================================================")
-    print("            GreenSlot Plug-and-Play IoT Bridge Gateway                ")
-    print("======================================================================")
-    print(f"[CONFIG] Backend URL : {BACKEND_URL}")
-    print(f"[CONFIG] Device ID   : {DEVICE_ID}")
-    print(f"[CONFIG] Baud Rate   : {BAUD_RATE}")
-    print("----------------------------------------------------------------------")
-
-    active_port = find_arduino_port()
-    if not active_port:
-        print("[ERROR] No Arduino or USB serial device detected!")
-        print("[ACTION REQUIRED] Please plug your Arduino board into a USB port and restart.")
+    print("======================================================")
+    print("      HỆ THỐNG ĐỒNG BỘ IOT (BƠM + CẢM BIẾN)           ")
+    print("======================================================")
+    
+    # BƯỚC 1: LẤY TOKEN TRƯỚC KHI LÀM VIỆC
+    global HEADERS
+    token = get_jwt_token()
+    if not token:
+        print("🛑 Dừng chương trình vì không lấy được Token xác thực!")
         sys.exit(1)
+        
+    HEADERS['Authorization'] = f'Bearer {token}'
+    
+    # BƯỚC 2: KẾT NỐI ARDUINO
+    port = find_arduino()
+    if not port:
+        print("[LỖI] Không tìm thấy Arduino. Hãy cắm cáp USB vào mạch Master!")
+        return
 
-    arduino = None
+    print(f"[INFO] Đang kết nối Master Arduino ở cổng {port}...")
+    try:
+        arduino = serial.Serial(port, BAUD_RATE, timeout=0.1)
+        time.sleep(2) # Chờ Arduino reset
+        print(f"[INFO] Đã kết nối thành công. Đang lắng nghe dữ liệu...\n")
+    except serial.SerialException:
+        print("[LỖI] Cổng COM đang bị chiếm! Hãy tắt Serial Monitor trên PlatformIO.")
+        return
+
+    last_pump_check = 0
+    last_sent_status = None 
 
     while True:
-        try:
-            if arduino is None or not arduino.is_open:
-                if not active_port:
-                    active_port = find_arduino_port()
-                if not active_port:
-                    print("[RETRY] Waiting for Arduino device connection...")
-                    time.sleep(5)
-                    continue
-
-                arduino = create_serial_connection(active_port, BAUD_RATE)
-                if arduino is None:
-                    print(f"[RETRY] Retrying connection to {active_port} in 5 seconds...")
-                    time.sleep(5)
-                    active_port = find_arduino_port()
-                    continue
-
-            if arduino.in_waiting > 0:
-                raw_line = arduino.readline().decode('utf-8', errors='ignore').strip()
-                if not raw_line:
-                    continue
-
+        # ----------------------------------------------------
+        # LUỒNG 1: ĐỌC DỮ LIỆU TỪ ARDUINO (CẢM BIẾN VÀ BƠM)
+        # ----------------------------------------------------
+        while arduino.in_waiting > 0:
+            raw_line = arduino.readline().decode('utf-8', errors='ignore').strip()
+            if raw_line:
+                print(f"[DEBUG COM] {raw_line}") 
                 try:
-                    sensor_data = json.loads(raw_line)
+                    data = json.loads(raw_line)
+                    
+                    # 1A. XỬ LÝ TRẠNG THÁI BƠM
+                    if 'pump_status' in data:
+                        status = data['pump_status']
+                        if status == 'ON':
+                            print("💧 [ARDUINO] Máy bơm đã được BẬT")
+                        elif status == 'OFF':
+                            print("🛑 [ARDUINO] Máy bơm đã TẮT")
+                        elif status == 'TIMEOUT_OFF':
+                            print("⏱️ [ARDUINO] Hết 5 giây -> Tự động TẮT BƠM")
+                            last_sent_status = "OFF"
+                            
+                            # Báo cho Backend biết bơm đã tắt do timeout
+                            try:
+                                update_payload = {"deviceId": DEVICE_ID, "status": "OFF"}
+                                resp = requests.post(BACKEND_PUMP_URL, json=update_payload, headers=HEADERS, timeout=2)
+                                if resp.status_code in (200, 201):
+                                    print("✅ [API BƠM] Đã cập nhật trạng thái TẮT lên Backend")
+                            except Exception as e:
+                                print(f"⚠️ [LỖI MẠNG] Không thể báo Backend tắt bơm: {e}")
+
+                    # 1B. XỬ LÝ DỮ LIỆU CẢM BIẾN (GOM VÀO MẢNG READINGS)
+                    if 'soil' in data or 'light' in data or 'ph' in data:
+                        readings = []
+                        if 'soil' in data:
+                            readings.append({"sensorType": "SOIL_MOISTURE", "value": float(data['soil']), "unit": "%"})
+                        if 'light' in data:
+                            readings.append({"sensorType": "LIGHT_INTENSITY", "value": float(data['light']), "unit": "Lux"})
+                        if 'ph' in data:
+                            readings.append({"sensorType": "PH", "value": float(data['ph']), "unit": "pH"})
+
+                        if len(readings) > 0:
+                            payload = {"deviceId": DEVICE_ID, "readings": readings}
+                            try:
+                                response = requests.post(BACKEND_SENSOR_URL, json=payload, headers=HEADERS, timeout=2)
+                                if response.status_code in [200, 201]:
+                                    print(f"🌱 [API CẢM BIẾN] Đã đẩy {len(readings)} thông số lên Backend thành công!")
+                                else:
+                                    print(f"❌ [LỖI API CẢM BIẾN] Code {response.status_code}: {response.text}")
+                            except Exception as e:
+                                print(f"❌ [LỖI MẠNG] Không thể đẩy dữ liệu cảm biến: {e}")
+                                
                 except json.JSONDecodeError:
-                    print(f"[DEBUG] Ignored non-JSON string: {raw_line}")
-                    continue
+                    pass 
 
-                if 'moisture' in sensor_data:
-                    payload = {
-                        "device_id": DEVICE_ID,
-                        "sensor_type": "SOIL_MOISTURE",
-                        "value": float(sensor_data['moisture']),
-                        "unit": "%"
-                    }
-                    print(f"[TELEMETRY] Moisture: {sensor_data['moisture']}% -> Forwarding to backend...")
-                    forward_to_backend(payload)
-
-                if 'light' in sensor_data:
-                    payload = {
-                        "device_id": DEVICE_ID,
-                        "sensor_type": "LIGHT_INTENSITY",
-                        "value": float(sensor_data['light']),
-                        "unit": "Lux"
-                    }
-                    print(f"[TELEMETRY] Light: {sensor_data['light']} Lux -> Forwarding to backend...")
-                    forward_to_backend(payload)
-
-        except (serial.SerialException, OSError) as e:
-            print(f"[ERROR] Serial disconnection on {active_port}: {e}")
-            if arduino and arduino.is_open:
-                arduino.close()
-            arduino = None
-            active_port = None
-            time.sleep(3)
-        except KeyboardInterrupt:
-            print("\n[INFO] Bridge script terminated cleanly by user.")
-            if arduino and arduino.is_open:
-                arduino.close()
-            break
-        except Exception as e:
-            print(f"[ERROR] Unexpected error: {e}")
-            time.sleep(1)
-
+        # ----------------------------------------------------
+        # LUỒNG 2: LẤY LỆNH BƠM TỪ BACKEND XUỐNG ARDUINO
+        # ----------------------------------------------------
+        current_time = time.time()
+        if current_time - last_pump_check > 1.0: 
+            try:
+                pump_resp = requests.get(BACKEND_PUMP_URL, headers=HEADERS, timeout=2)
+                if pump_resp.status_code == 200:
+                    backend_status = pump_resp.json().get("status")
+                    
+                    if backend_status == "ON" and last_sent_status != "ON":
+                        arduino.write(b"ON\n")
+                        arduino.flush()
+                        print("👉 [LỆNH WEB] Gửi lệnh ON xuống mạch")
+                        last_sent_status = "ON" 
+                        
+                    elif backend_status == "OFF" and last_sent_status != "OFF":
+                        arduino.write(b"OFF\n")
+                        arduino.flush()
+                        print("👉 [LỆNH WEB] Gửi lệnh OFF xuống mạch")
+                        last_sent_status = "OFF"
+            except Exception as e:
+                pass # Bỏ qua lỗi kết nối nhẹ để vòng lặp không bị chết
+                
+            last_pump_check = current_time
+            
+        time.sleep(0.05)
 
 if __name__ == '__main__':
     main()
