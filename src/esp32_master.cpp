@@ -4,7 +4,7 @@
 #include <HTTPClient.h>
 
 // ================= 1. CẤU HÌNH WIFI & MẠNG =================
-const char* ssid = "PASSIO COFFEE";       // <-- THAY TÊN WIFI NHÀ BẠN
+const char* ssid = "Passio Coffee";       // <-- THAY TÊN WIFI NHÀ BẠN
 const char* password = "19009434";     // <-- THAY MẬT KHẨU WIFI
 
 const char* IOT_USERNAME = "garden_staff";
