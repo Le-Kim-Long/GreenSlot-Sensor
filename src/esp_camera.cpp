@@ -1,25 +1,24 @@
 #include <Arduino.h>
 #include "esp_camera.h"
 #include <WiFi.h>
-#include <WiFiUdp.h>        // <-- [NEW] Thư viện UDP để dò tìm Server
 #include "esp_http_server.h"
-#include <HTTPClient.h>     // Thư viện để gửi API lên Java Spring Boot
+#include <HTTPClient.h>
 
 // ================= 1. CẤU HÌNH WIFI & ĐỊNH DANH CAMERA =================
-const char* ssid = "FPTU_Library";       // <-- THAY TÊN WIFI NHÀ BẠN
-const char* password = "12345678";     // <-- THAY MẬT KHẨU WIFI
+const char* ssid = "Passio Coffee";       // <-- THAY TÊN WIFI
+const char* password = "19009434";     // <-- THAY MẬT KHẨU WIFI
 
-// Định danh cho con Camera này
 const char* CAM_ID = "CAM_SVIET_01"; 
 const char* CAM_NAME = "Vườn Rau Tầng 1"; 
 
-// [NEW] Cấu hình Radar dò tìm tự động
-WiFiUDP udp;
-const int UDP_PORT = 8888;          // Cổng UDP quy ước với Java
-String serverPingUrl = "";          // Link API sẽ được tự động điền sau khi dò thấy Java
+// [CHUẨN HÓA] Cố định IP của Backend Spring Boot (Không dùng Radar nữa)
+const String serverIp = "192.168.1.50";  // <-- SỬA THÀNH IP CỦA MÁY TÍNH CHẠY SPRING BOOT
+const int serverPort = 8080;
 
+// Các biến quản lý thời gian gửi Heartbeat
+String serverPingUrl = "http://" + serverIp + ":" + String(serverPort) + "/api/cameras/ping";
 unsigned long lastPingTime = 0;
-const long PING_INTERVAL = 30000;   // 30 giây báo cáo IP lên Java 1 lần
+const unsigned long PING_INTERVAL = 30000; // 30 giây báo cáo trạng thái 1 lần
 
 // ================= 2. CẤU HÌNH CHÂN CHO MẪU AI-THINKER =================
 #define PWDN_GPIO_NUM     32
@@ -86,56 +85,11 @@ const char INDEX_HTML[] = R"rawliteral(
 </html>
 )rawliteral";
 
-// ================= 4. CÁC HÀM XỬ LÝ RADAR & BÁO CÁO IP =================
-
-// [NEW] Hàm Radar: Hét vào mạng LAN để tìm máy tính chạy Spring Boot
-bool discoverSpringServer() {
-  Serial.println("\n[RADAR] Đang quét mạng LAN tìm GreenSlot Server...");
-  
-  // Gửi gói tin Broadcast tới tất cả các máy trong mạng WiFi
-  udp.beginPacket("255.255.255.255", UDP_PORT);
-  udp.print("DISCOVER_GREENSLOT_SERVER");
-  udp.endPacket();
-
-  unsigned long startTime = millis();
-  // Lắng nghe câu trả lời trong tối đa 3 giây
-  while (millis() - startTime < 3000) { 
-    int packetSize = udp.parsePacket();
-    if (packetSize) {
-      char reply[255];
-      int len = udp.read(reply, 255);
-      if (len > 0) reply[len] = 0;
-
-      String response = String(reply);
-      // Nếu nghe thấy câu trả lời chuẩn từ Java Spring Boot
-      if (response.startsWith("GREENSLOT_SERVER:")) {
-        String discoveredIp = udp.remoteIP().toString(); 
-        String portStr = response.substring(17); 
-        int discoveredPort = portStr.length() > 0 ? portStr.toInt() : 8080;
-
-        // Tự động lắp ghép thành link Ping hoàn chỉnh
-        serverPingUrl = "http://" + discoveredIp + ":" + String(discoveredPort) + "/api/cameras/ping";
-        
-        Serial.println("==========================================");
-        Serial.println("[RADAR] => ĐÃ TÌM THẤY SERVER JAVA!");
-        Serial.println("[RADAR] => IP Máy Tính: " + discoveredIp);
-        Serial.println("[RADAR] => URL API: " + serverPingUrl);
-        Serial.println("==========================================");
-        return true;
-      }
-    }
-    delay(50);
-  }
-  
-  Serial.println("[RADAR] Chưa tìm thấy Server (Có thể Java chưa bật hoặc bị Tường lửa chặn).");
-  return false;
-}
-
-// Hàm gửi báo cáo điểm danh lên Java Spring Boot (Heartbeat)
+// ================= 4. HÀM GỬI BÁO CÁO (HEARTBEAT) =================
 void sendHeartbeat() {
-  if (WiFi.status() == WL_CONNECTED && serverPingUrl != "") {
+  if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin(serverPingUrl); // <-- Sử dụng link tự động tìm được
+    http.begin(serverPingUrl); 
     http.addHeader("Content-Type", "application/json");
 
     String currentIP = WiFi.localIP().toString();
@@ -150,20 +104,19 @@ void sendHeartbeat() {
     jsonPayload += "\"capture_url\":\"" + captureUrl + "\"";
     jsonPayload += "}";
 
-    Serial.print("[HEARTBEAT] Đang gửi báo cáo IP lên Java... ");
+    Serial.print("[HEARTBEAT] Đang báo cáo IP lên Spring Boot... ");
     int httpResponseCode = http.POST(jsonPayload);
 
     if (httpResponseCode > 0) {
-      Serial.printf("Thành công! Mã phản hồi: %d\n", httpResponseCode);
+      Serial.printf("Thành công! Mã: %d\n", httpResponseCode);
     } else {
-      Serial.printf("Lỗi kết nối (%s).\n", http.errorToString(httpResponseCode).c_str());
-      Serial.println("[WARNING] Có thể Server đã đổi IP hoặc tắt. Sẽ bật Radar quét lại!");
-      serverPingUrl = ""; // Xóa link cũ để vòng lặp sau tự động quét lại
+      Serial.printf("Thất bại! Lỗi kết nối (%s).\n", http.errorToString(httpResponseCode).c_str());
     }
     http.end();
   }
 }
 
+// ================= 5. HÀM XỬ LÝ ẢNH (CHỤP & STREAM) =================
 static esp_err_t index_handler(httpd_req_t *req) {
   httpd_resp_set_type(req, "text/html");
   return httpd_resp_send(req, INDEX_HTML, strlen(INDEX_HTML));
@@ -254,7 +207,7 @@ void startCameraServer() {
   }
 }
 
-// ================= 5. SETUP =================
+// ================= 6. SETUP VÀ LOOP =================
 void setup() {
   Serial.begin(9600);
   Serial.println();
@@ -303,35 +256,22 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("\n[SYSTEM] WiFi kết nối thành công!");
-  Serial.print("[SYSTEM] TRUY CẬP IP WEB: http://");
+  Serial.print("[SYSTEM] TRUY CẬP IP WEB CHỤP ẢNH: http://");
   Serial.println(WiFi.localIP());
 
   startCameraServer();
 
-  // [NEW] Mở cổng UDP và quét tìm Server ngay lần khởi động đầu tiên
-  udp.begin(UDP_PORT);
-  if (discoverSpringServer()) {
-    sendHeartbeat(); // Nếu tìm thấy thì gửi điểm danh luôn
-  }
+  // Báo cáo IP lên Server ngay lập tức khi vừa khởi động xong
+  sendHeartbeat();
   lastPingTime = millis();
 }
 
-// ================= 6. LOOP =================
 void loop() {
   unsigned long currentMillis = millis();
   
-  // Kiểm tra mỗi 30 giây
+  // Cứ sau đúng 30 giây lại báo cáo tình trạng lên Spring Boot 1 lần
   if (currentMillis - lastPingTime >= PING_INTERVAL) {
     lastPingTime = currentMillis;
-    
-    // Nếu chưa có link Server (hoặc bị mất kết nối trước đó), hãy quét Radar lại!
-    if (serverPingUrl == "") {
-      if (discoverSpringServer()) {
-        sendHeartbeat();
-      }
-    } else {
-      // Nếu đã có link, tiến hành gửi Heartbeat
-      sendHeartbeat();
-    }
+    sendHeartbeat();
   }
 }
