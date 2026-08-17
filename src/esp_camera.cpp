@@ -6,8 +6,8 @@
 #include <HTTPClient.h>     // Thư viện để gửi API lên Java Spring Boot
 
 // ================= 1. CẤU HÌNH WIFI & ĐỊNH DANH CAMERA =================
-const char* ssid = "Hoang Dung";       // <-- THAY TÊN WIFI NHÀ BẠN
-const char* password = "90909090";     // <-- THAY MẬT KHẨU WIFI
+const char* ssid = "FPTU_Library";       // <-- THAY TÊN WIFI NHÀ BẠN
+const char* password = "12345678";     // <-- THAY MẬT KHẨU WIFI
 
 // Định danh cho con Camera này
 const char* CAM_ID = "CAM_SVIET_01"; 
