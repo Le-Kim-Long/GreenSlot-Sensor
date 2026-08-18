@@ -6,13 +6,13 @@
 
 // ================= 1. CẤU HÌNH WIFI & ĐỊNH DANH CAMERA =================
 const char* ssid = "Passio Coffee";       // <-- THAY TÊN WIFI NHÀ BẠN
-const char* password = "19009434";     // <-- THAY MẬT KHẨU WIFI
+const char* password = "19009434";  // <-- THAY MẬT KHẨU WIFI
 
 const char* CAM_ID = "CAM_SVIET_01"; 
 const char* CAM_NAME = "Vườn Rau Tầng 1"; 
 
 // [CHUẨN HÓA] Cố định IP của Backend Spring Boot (Không dùng Radar nữa)
-const String serverIp = "192.168.1.50";  // <-- SỬA THÀNH IP CỦA MÁY TÍNH CHẠY SPRING BOOT
+const String serverIp = "10.10.10.231"; // <-- IP Máy tính của bạn
 const int serverPort = 8080;
 
 // Các biến quản lý thời gian gửi Heartbeat
