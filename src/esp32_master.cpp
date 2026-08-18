@@ -1,22 +1,19 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiUdp.h>        // Thư viện UDP để dò tìm Server
 #include <HTTPClient.h>
 
 // ================= 1. CẤU HÌNH WIFI & MẠNG =================
 const char* ssid = "Passio Coffee";       // <-- THAY TÊN WIFI NHÀ BẠN
 const char* password = "19009434";     // <-- THAY MẬT KHẨU WIFI
 
-const char* IOT_USERNAME = "garden_staff";
-const char* IOT_PASSWORD = "Staff@123";
+const char* IOT_USERNAME = "admin";
+const char* IOT_PASSWORD = "Admin@123";
 const char* API_KEY = "default_iot_key_for_dev_only";
 const char* DEVICE_ID = "arduino-greenhouse-01";
 
-// [NEW] Biến lưu trữ IP và Port dò được từ Radar
-String serverIp = ""; 
-int serverPort = 8080;
-WiFiUDP udp;
-const int UDP_PORT = 8888; 
+// [CHUẨN HÓA] Bỏ Radar, gán cứng IP của máy tính chạy Spring Boot
+const String serverIp = "10.10.10.231"; // <-- IP Máy tính của bạn
+const int serverPort = 8080;
 String JWT_TOKEN = ""; 
 
 // ================= 2. CẤU HÌNH CHÂN & BIẾN BƠM =================
@@ -30,7 +27,7 @@ const unsigned long PUMP_DURATION = 5000;
 unsigned long pumpStartTime = 0;
 bool isPumpRunning = false; 
 
-// [FIX] Biến Cooldown chặn lỗi "bật lên tắt ngay"
+// Biến Cooldown chặn lỗi "bật lên tắt ngay"
 bool isCooldown = false;
 unsigned long cooldownStartTime = 0;
 const unsigned long COOLDOWN_DURATION = 3000; // Nghỉ 3 giây sau khi tắt
@@ -38,46 +35,9 @@ const unsigned long COOLDOWN_DURATION = 3000; // Nghỉ 3 giây sau khi tắt
 unsigned long lastPumpCheckTime = 0;
 const long PUMP_POLL_INTERVAL = 2000; // 2 giây hỏi Web 1 lần
 
-// ================= 3. HÀM RADAR TÌM SERVER JAVA =================
-bool discoverSpringServer() {
-  Serial.println("\n[RADAR] Đang quét mạng LAN tìm GreenSlot Server...");
-  
-  udp.beginPacket("255.255.255.255", UDP_PORT);
-  udp.print("DISCOVER_GREENSLOT_SERVER");
-  udp.endPacket();
-
-  unsigned long startTime = millis();
-  while (millis() - startTime < 3000) { 
-    int packetSize = udp.parsePacket();
-    if (packetSize) {
-      char reply[255];
-      int len = udp.read(reply, 255);
-      if (len > 0) reply[len] = 0;
-
-      String response = String(reply);
-      if (response.startsWith("GREENSLOT_SERVER:")) {
-        serverIp = udp.remoteIP().toString(); 
-        String portStr = response.substring(17); 
-        serverPort = portStr.length() > 0 ? portStr.toInt() : 8080;
-
-        Serial.println("==========================================");
-        Serial.println("✅ [RADAR] ĐÃ TÌM THẤY SERVER JAVA!");
-        Serial.println("👉 IP Server : " + serverIp);
-        Serial.println("👉 Port      : " + String(serverPort));
-        Serial.println("==========================================");
-        return true;
-      }
-    }
-    delay(50);
-  }
-  
-  Serial.println("❌ [RADAR] Chưa tìm thấy Server. Đang thử lại...");
-  return false;
-}
-
-// ================= 4. HÀM TỰ ĐỘNG ĐĂNG NHẬP LẤY TOKEN =================
+// ================= 3. HÀM TỰ ĐỘNG ĐĂNG NHẬP LẤY TOKEN =================
 bool loginToBackend() {
-  if (WiFi.status() == WL_CONNECTED && serverIp != "") {
+  if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     String url = "http://" + serverIp + ":" + String(serverPort) + "/api/auth/login";
     
@@ -112,7 +72,7 @@ bool loginToBackend() {
   return false;
 }
 
-// ================= 5. KHỞI TẠO =================
+// ================= 4. KHỞI TẠO =================
 void setup() {
   Serial.begin(9600);        
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2); 
@@ -134,21 +94,14 @@ void setup() {
   Serial.print(F("🌐 IP Address: "));
   Serial.println(WiFi.localIP());
 
-  // --- MỞ CỔNG UDP VÀ DÒ TÌM SERVER ---
-  udp.begin(UDP_PORT);
-  while (serverIp == "") {
-    discoverSpringServer();
-    if (serverIp == "") delay(2000); 
-  }
-
-  // --- ĐĂNG NHẬP SAU KHI TÌM ĐƯỢC IP ---
+  // --- ĐĂNG NHẬP SAU KHI KẾT NỐI WIFI ---
   while (JWT_TOKEN == "") {
     loginToBackend();
-    if (JWT_TOKEN == "") delay(3000); 
+    if (JWT_TOKEN == "") delay(3000); // Thử lại sau 3 giây nếu lỗi
   }
 }
 
-// ================= 6. GỬI DỮ LIỆU CẢM BIẾN LÊN JAVA =================
+// ================= 5. GỬI DỮ LIỆU CẢM BIẾN LÊN JAVA =================
 void postSensorData(String rawJson) {
   if (WiFi.status() == WL_CONNECTED && JWT_TOKEN != "") {
     HTTPClient http;
@@ -185,13 +138,15 @@ void postSensorData(String rawJson) {
       JWT_TOKEN = "";
       loginToBackend();
     } else if (httpResponseCode == 200 || httpResponseCode == 201) {
-      Serial.println("🌱 [API CẢM BIẾN] Đã gửi thành công!");
+      Serial.println("🌱 [API CẢM BIẾN] Đã gửi Data thành công!");
+    } else {
+      Serial.printf("❌ [API LỖI] Mã: %d\n", httpResponseCode);
     }
     http.end();
   }
 }
 
-// ================= 7. KIỂM TRA LỆNH BẬT TẮT BƠM =================
+// ================= 6. KIỂM TRA LỆNH BẬT TẮT BƠM =================
 void checkPumpStatus() {
   if (WiFi.status() == WL_CONNECTED && JWT_TOKEN != "") {
     HTTPClient http;
@@ -230,7 +185,7 @@ void checkPumpStatus() {
   }
 }
 
-// ================= 8. BÁO SERVER RẰNG ĐÃ TẮT BƠM =================
+// ================= 7. BÁO SERVER RẰNG ĐÃ TẮT BƠM =================
 void notifyServerPumpOff() {
   if (WiFi.status() == WL_CONNECTED && JWT_TOKEN != "") {
     HTTPClient http;
@@ -246,7 +201,7 @@ void notifyServerPumpOff() {
   }
 }
 
-// ================= 9. VÒNG LẶP CHÍNH =================
+// ================= 8. VÒNG LẶP CHÍNH =================
 void loop() {
   unsigned long currentMillis = millis();
 
@@ -265,8 +220,6 @@ void loop() {
   }
 
   // 3. Tự động tắt bơm sau 5 giây để bảo vệ
-  // 3. Tự động tắt bơm sau 5 giây để bảo vệ
-  // SỬA Ở DÒNG NÀY: Thay currentMillis bằng millis()
   if (isPumpRunning && (millis() - pumpStartTime >= PUMP_DURATION)) {
     digitalWrite(RELAY_PIN, LOW);   
     digitalWrite(LED_PIN, LOW);          
