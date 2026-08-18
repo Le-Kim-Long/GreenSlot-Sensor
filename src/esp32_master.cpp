@@ -12,7 +12,7 @@ const char* API_KEY = "default_iot_key_for_dev_only";
 const char* DEVICE_ID = "arduino-greenhouse-01";
 
 // [CHUẨN HÓA] Bỏ Radar, gán cứng IP của máy tính chạy Spring Boot
-const String serverIp = "10.10.10.231"; // <-- IP Máy tính của bạn
+const String serverIp = "10.10.10.254"; // <-- IP Máy tính của bạn
 const int serverPort = 8080;
 String JWT_TOKEN = ""; 
 
@@ -148,13 +148,15 @@ void postSensorData(String rawJson) {
 
 // ================= 6. KIỂM TRA LỆNH BẬT TẮT BƠM =================
 void checkPumpStatus() {
-  if (WiFi.status() == WL_CONNECTED && JWT_TOKEN != "") {
+  if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     String url = "http://" + serverIp + ":" + String(serverPort) + "/api/iot/pump/status";
     
     http.begin(url);
     http.addHeader("X-IoT-Api-Key", API_KEY);
-    http.addHeader("Authorization", "Bearer " + JWT_TOKEN);
+    if (JWT_TOKEN != "") {
+      http.addHeader("Authorization", "Bearer " + JWT_TOKEN);
+    }
     
     int httpResponseCode = http.GET();
     
@@ -165,7 +167,7 @@ void checkPumpStatus() {
       
       if (response.indexOf("\"status\":\"ON\"") != -1 || response.indexOf("\"status\": \"ON\"") != -1) {
         if (!isPumpRunning) {
-          Serial.println("💧 [LỆNH WEB] -> BẬT BƠM");
+          Serial.println("💧 [HỆ THỐNG / WEB] -> KÍCH HOẠT BẬT BƠM!");
           digitalWrite(RELAY_PIN, HIGH);
           digitalWrite(LED_PIN, HIGH);
           pumpStartTime = millis();
@@ -174,7 +176,7 @@ void checkPumpStatus() {
       } 
       else if (response.indexOf("\"status\":\"OFF\"") != -1 || response.indexOf("\"status\": \"OFF\"") != -1) {
         if (isPumpRunning) {
-          Serial.println("🛑 [LỆNH WEB] -> TẮT BƠM");
+          Serial.println("🛑 [HỆ THỐNG / WEB] -> TẮT BƠM");
           digitalWrite(RELAY_PIN, LOW);
           digitalWrite(LED_PIN, LOW);
           isPumpRunning = false;
@@ -187,15 +189,17 @@ void checkPumpStatus() {
 
 // ================= 7. BÁO SERVER RẰNG ĐÃ TẮT BƠM =================
 void notifyServerPumpOff() {
-  if (WiFi.status() == WL_CONNECTED && JWT_TOKEN != "") {
+  if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     String url = "http://" + serverIp + ":" + String(serverPort) + "/api/iot/pump/status";
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-IoT-Api-Key", API_KEY);
-    http.addHeader("Authorization", "Bearer " + JWT_TOKEN);
+    if (JWT_TOKEN != "") {
+      http.addHeader("Authorization", "Bearer " + JWT_TOKEN);
+    }
     
-    String payload = "{\"deviceId\":\"" + String(DEVICE_ID) + "\",\"status\":\"OFF\"}";
+    String payload = "{\"status\":\"OFF\"}";
     http.POST(payload);
     http.end();
   }
