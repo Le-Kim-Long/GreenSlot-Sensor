@@ -7,7 +7,7 @@ const char* ssid = "Passio Coffee";       // <-- THAY TÊN WIFI NHÀ BẠN
 const char* password = "19009434";     // <-- THAY MẬT KHẨU WIFI
 
 const char* IOT_USERNAME = "admin";
-const char* IOT_PASSWORD = "Admin@123";
+const char* IOT_PASSWORD = "GreenSlot@2024";
 const char* API_KEY = "default_iot_key_for_dev_only";
 const char* DEVICE_ID = "arduino-greenhouse-01";
 
