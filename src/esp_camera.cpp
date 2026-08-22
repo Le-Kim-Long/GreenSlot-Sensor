@@ -3,20 +3,36 @@
 #include <WiFi.h>
 #include "esp_http_server.h"
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h> // <-- THÊM THƯ VIỆN NÀY ĐỂ GỌI HTTPS LÊN RENDER
 
 // ================= 1. CẤU HÌNH WIFI & ĐỊNH DANH CAMERA =================
-const char* ssid = "Passio Coffee";       // <-- THAY TÊN WIFI NHÀ BẠN
-const char* password = "19009434";  // <-- THAY MẬT KHẨU WIFI
+const char* ssid = "Hoang Dung";       // <-- THAY TÊN WIFI NHÀ BẠN
+const char* password = "90909090";  // <-- THAY MẬT KHẨU WIFI
 
 const char* CAM_ID = "CAM_SVIET_01"; 
 const char* CAM_NAME = "Vườn Rau Tầng 1"; 
 
-// [CHUẨN HÓA] Cố định IP của Backend Spring Boot (Không dùng Radar nữa)
-const String serverIp = "10.10.10.231"; // <-- IP Máy tính của bạn
-const int serverPort = 8080;
+// ================= 1. CẤU HÌNH MÔI TRƯỜNG (LOCAL / DEPLOY) =================
+// Đổi thành 'true' nếu chạy Local, 'false' nếu chạy Deploy (Render)
+const bool USE_LOCAL_SERVER = false; 
+
+// Cấu hình Local
+const String localIp = "192.168.1.14";
+const int localPort = 8080;
+
+// Cấu hình Deploy
+const String deployHost = "greenslot-backend.onrender.com";
+
+// ================= HÀM TẠO BASE URL =================
+String getBaseUrl() {
+  if (USE_LOCAL_SERVER) {
+    return "http://" + localIp + ":" + String(localPort);
+  } else {
+    return "https://" + deployHost;
+  }
+}
 
 // Các biến quản lý thời gian gửi Heartbeat
-String serverPingUrl = "http://" + serverIp + ":" + String(serverPort) + "/api/cameras/ping";
 unsigned long lastPingTime = 0;
 const unsigned long PING_INTERVAL = 30000; // 30 giây báo cáo trạng thái 1 lần
 
@@ -88,9 +104,23 @@ const char INDEX_HTML[] = R"rawliteral(
 // ================= 4. HÀM GỬI BÁO CÁO (HEARTBEAT) =================
 void sendHeartbeat() {
   if (WiFi.status() == WL_CONNECTED) {
+    WiFiClientSecure client; // <-- SỬ DỤNG CLIENT BẢO MẬT
+    client.setInsecure();    // <-- Bỏ qua kiểm tra chứng chỉ SSL
+
     HTTPClient http;
-    http.begin(serverPingUrl); 
+    String serverPingUrl = getBaseUrl() + "/api/cameras/ping";
+    
+    // NẾU LÀ DEPLOYED (HTTPS) THÌ DÙNG CLIENT SECURE, NẾU LOCAL (HTTP) THÌ CHẠY BÌNH THƯỜNG
+    if (USE_LOCAL_SERVER) {
+      http.begin(serverPingUrl); 
+    } else {
+      http.begin(client, serverPingUrl);
+    }
+    
     http.addHeader("Content-Type", "application/json");
+
+    // NẾU API /api/cameras/ping CỦA BẠN CŨNG YÊU CẦU API KEY THÌ BỎ COMMENT DÒNG DƯỚI VÀ ĐIỀN API KEY
+    // http.addHeader("X-IoT-Api-Key", "ĐIỀN_API_KEY_VÀO_ĐÂY_NẾU_CẦN");
 
     String currentIP = WiFi.localIP().toString();
     String streamUrl = "http://" + currentIP + ":81/stream";

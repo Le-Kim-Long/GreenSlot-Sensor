@@ -1,20 +1,37 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h> // <-- THÊM THƯ VIỆN NÀY ĐỂ CHẠY HTTPS
 
 // ================= 1. CẤU HÌNH WIFI & MẠNG =================
-const char* ssid = "Passio Coffee";       // <-- THAY TÊN WIFI NHÀ BẠN
-const char* password = "19009434";     // <-- THAY MẬT KHẨU WIFI
+const char* ssid = "Hoang Dung";       // <-- THAY TÊN WIFI NHÀ BẠN
+const char* password = "90909090";     // <-- THAY MẬT KHẨU WIFI
 
 const char* IOT_USERNAME = "admin";
 const char* IOT_PASSWORD = "GreenSlot@2024";
-const char* API_KEY = "default_iot_key_for_dev_only";
-const char* DEVICE_ID = "arduino-greenhouse-01";
+const char* API_KEY = "test_key"; // <-- Hãy chắc chắn API Key này giống trên Render
+const char* DEVICE_ID = "P-Q1-01A";
 
-// [CHUẨN HÓA] Bỏ Radar, gán cứng IP của máy tính chạy Spring Boot
-const String serverIp = "10.10.10.254"; // <-- IP Máy tính của bạn
-const int serverPort = 8080;
+// ================= 1. CẤU HÌNH MÔI TRƯỜNG =================
+// Đổi thành 'true' nếu chạy Local, 'false' nếu chạy Deploy (Render)
+const bool USE_LOCAL_SERVER = false; 
+
+// Cấu hình Local
+const String localIp = "192.168.1.14";
+const int localPort = 8080;
+
+// Cấu hình Deploy
+const String deployHost = "greenslot-backend.onrender.com";
 String JWT_TOKEN = ""; 
+
+// ================= HÀM TẠO BASE URL =================
+String getBaseUrl() {
+  if (USE_LOCAL_SERVER) {
+    return "http://" + localIp + ":" + String(localPort);
+  } else {
+    return "https://" + deployHost;
+  }
+}
 
 // ================= 2. CẤU HÌNH CHÂN & BIẾN BƠM =================
 #define RXD2 16
@@ -33,16 +50,26 @@ unsigned long cooldownStartTime = 0;
 const unsigned long COOLDOWN_DURATION = 3000; // Nghỉ 3 giây sau khi tắt
 
 unsigned long lastPumpCheckTime = 0;
-const long PUMP_POLL_INTERVAL = 2000; // 2 giây hỏi Web 1 lần
+const long PUMP_POLL_INTERVAL = 10000; // 10 giây hỏi Web 1 lần
 
 // ================= 3. HÀM TỰ ĐỘNG ĐĂNG NHẬP LẤY TOKEN =================
 bool loginToBackend() {
   if (WiFi.status() == WL_CONNECTED) {
+    WiFiClientSecure client; // <-- SỬ DỤNG CLIENT BẢO MẬT
+    client.setInsecure();    // <-- Bỏ qua kiểm tra chứng chỉ SSL
+    
     HTTPClient http;
-    String url = "http://" + serverIp + ":" + String(serverPort) + "/api/auth/login";
+    String url = getBaseUrl() + "/api/auth/login";
     
     Serial.println(F("\n[AUTH] Đang gửi yêu cầu đăng nhập lấy Token..."));
-    http.begin(url);
+    
+    // NẾU LÀ DEPLOYED (HTTPS) THÌ DÙNG CLIENT SECURE, NẾU LOCAL (HTTP) THÌ CHẠY BÌNH THƯỜNG
+    if (USE_LOCAL_SERVER) {
+      http.begin(url);
+    } else {
+      http.begin(client, url);
+    }
+    
     http.addHeader("Content-Type", "application/json");
 
     String loginPayload = "{\"username\":\"" + String(IOT_USERNAME) + "\",\"password\":\"" + String(IOT_PASSWORD) + "\"}";
@@ -59,6 +86,7 @@ bool loginToBackend() {
         if (firstQuote != -1 && secondQuote != -1) {
           JWT_TOKEN = response.substring(firstQuote + 1, secondQuote);
           Serial.println(F("✅ [AUTH] Lấy Token tự động thành công!"));
+          Serial.println("Token preview: " + JWT_TOKEN.substring(0, 10) + "..."); // In ra 10 ký tự đầu để debug
           http.end();
           return true;
         }
@@ -104,10 +132,18 @@ void setup() {
 // ================= 5. GỬI DỮ LIỆU CẢM BIẾN LÊN JAVA =================
 void postSensorData(String rawJson) {
   if (WiFi.status() == WL_CONNECTED && JWT_TOKEN != "") {
-    HTTPClient http;
-    String url = "http://" + serverIp + ":" + String(serverPort) + "/api/iot/sensors/data";
+    WiFiClientSecure client;
+    client.setInsecure();
     
-    http.begin(url);
+    HTTPClient http;
+    String url = getBaseUrl() + "/api/iot/sensors/data";
+    
+    if (USE_LOCAL_SERVER) {
+      http.begin(url);
+    } else {
+      http.begin(client, url);
+    }
+    
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-IoT-Api-Key", API_KEY);
     http.addHeader("Authorization", "Bearer " + JWT_TOKEN);
@@ -134,7 +170,7 @@ void postSensorData(String rawJson) {
     int httpResponseCode = http.POST(payload);
     
     if (httpResponseCode == 401) {
-      Serial.println("⚠️ [AUTH] Token hết hạn, đang xin cấp lại...");
+      Serial.println("⚠️ [AUTH] Token hoặc API Key bị từ chối (Mã 401), đang xin cấp lại...");
       JWT_TOKEN = "";
       loginToBackend();
     } else if (httpResponseCode == 200 || httpResponseCode == 201) {
@@ -149,10 +185,18 @@ void postSensorData(String rawJson) {
 // ================= 6. KIỂM TRA LỆNH BẬT TẮT BƠM =================
 void checkPumpStatus() {
   if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    String url = "http://" + serverIp + ":" + String(serverPort) + "/api/iot/pump/status";
+    WiFiClientSecure client;
+    client.setInsecure();
     
-    http.begin(url);
+    HTTPClient http;
+    String url = getBaseUrl() + "/api/iot/pump/status";
+    
+    if (USE_LOCAL_SERVER) {
+      http.begin(url);
+    } else {
+      http.begin(client, url);
+    }
+    
     http.addHeader("X-IoT-Api-Key", API_KEY);
     if (JWT_TOKEN != "") {
       http.addHeader("Authorization", "Bearer " + JWT_TOKEN);
@@ -190,9 +234,18 @@ void checkPumpStatus() {
 // ================= 7. BÁO SERVER RẰNG ĐÃ TẮT BƠM =================
 void notifyServerPumpOff() {
   if (WiFi.status() == WL_CONNECTED) {
+    WiFiClientSecure client;
+    client.setInsecure();
+    
     HTTPClient http;
-    String url = "http://" + serverIp + ":" + String(serverPort) + "/api/iot/pump/status";
-    http.begin(url);
+    String url = getBaseUrl() + "/api/iot/pump/status";
+    
+    if (USE_LOCAL_SERVER) {
+      http.begin(url);
+    } else {
+      http.begin(client, url);
+    }
+    
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-IoT-Api-Key", API_KEY);
     if (JWT_TOKEN != "") {
