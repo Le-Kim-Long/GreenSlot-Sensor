@@ -17,7 +17,7 @@ const char* CAM_NAME = "Vườn Rau Tầng 1";
 const bool USE_LOCAL_SERVER = false; 
 
 // Cấu hình Local
-const String localIp = "192.168.1.14";
+const String localIp = "192.168.1.15";
 const int localPort = 8080;
 
 // Cấu hình Deploy
@@ -292,16 +292,17 @@ void setup() {
   startCameraServer();
 
   // Báo cáo IP lên Server ngay lập tức khi vừa khởi động xong
-  sendHeartbeat();
-  lastPingTime = millis();
+  // sendHeartbeat();
+  // lastPingTime = millis();
 }
 
 void loop() {
-  unsigned long currentMillis = millis();
+  // unsigned long currentMillis = millis();
   
-  // Cứ sau đúng 30 giây lại báo cáo tình trạng lên Spring Boot 1 lần
-  if (currentMillis - lastPingTime >= PING_INTERVAL) {
-    lastPingTime = currentMillis;
-    sendHeartbeat();
-  }
+  // // Cứ sau đúng 30 giây lại báo cáo tình trạng lên Spring Boot 1 lần
+  // if (currentMillis - lastPingTime >= PING_INTERVAL) {
+  //   lastPingTime = currentMillis;
+  //   sendHeartbeat();
+  // }
+  delay(10000);
 }
