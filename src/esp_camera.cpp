@@ -14,7 +14,7 @@ const char* CAM_NAME = "Vườn Rau Tầng 1";
 
 // ================= 1. CẤU HÌNH MÔI TRƯỜNG (LOCAL / DEPLOY) =================
 // Đổi thành 'true' nếu chạy Local, 'false' nếu chạy Deploy (Render)
-const bool USE_LOCAL_SERVER = false; 
+const bool USE_LOCAL_SERVER = true; 
 
 // Cấu hình Local
 const String localIp = "192.168.1.15";

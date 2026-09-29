@@ -13,7 +13,7 @@ const char* API_KEY = "test_key";
 const char* DEVICE_ID = "arduino-greenhouse-01";
 
 // ================= 1. CẤU HÌNH MÔI TRƯỜNG =================
-const bool USE_LOCAL_SERVER = false; // Đổi thành 'true' nếu chạy Local, 'false' nếu chạy Deploy (Render)
+const bool USE_LOCAL_SERVER = true; // Đổi thành 'true' nếu chạy Local, 'false' nếu chạy Deploy (Render)
 
 const String localIp = "192.168.1.15";
 const int localPort = 8080;
