@@ -82,10 +82,10 @@ const char INDEX_HTML[] = R"rawliteral(
   
   <div class="container">
     <div class="box">
-      <h3>🔴 Trực Tiếp (Live Stream)</h3>
+      <h3>Trực Tiếp (Live Stream)</h3>
       <img id="stream" width="480">
     </div>
-    <button class="btn" onclick="downloadPhoto()">📸 Chụp & Lưu Ảnh Về Máy</button>
+    <button class="btn" onclick="downloadPhoto()">Chụp & Lưu Ảnh Về Máy</button>
   </div>
 
   <script>

@@ -85,7 +85,7 @@ bool loginToBackend() {
         
         if (firstQuote != -1 && secondQuote != -1) {
           JWT_TOKEN = response.substring(firstQuote + 1, secondQuote);
-          Serial.println(F("✅ [AUTH] Lấy Token thành công!"));
+          Serial.println(F("[AUTH] Lấy Token thành công!"));
           
           http.end();
           client.stop();
@@ -94,7 +94,7 @@ bool loginToBackend() {
         }
       }
     } else {
-      Serial.printf("❌ [AUTH] Lỗi đăng nhập: %d\n", httpResponseCode);
+      Serial.printf("[AUTH] Lỗi đăng nhập: %d\n", httpResponseCode);
     }
     
     http.end();
@@ -150,12 +150,12 @@ void postSensorData(String rawJson) {
     int httpResponseCode = http.POST(payload);
     
     if (httpResponseCode == 401) {
-      Serial.println("⚠️ [AUTH] Token hết hạn, đang xin cấp lại...");
+      Serial.println("[AUTH] Token hết hạn, đang xin cấp lại...");
       JWT_TOKEN = "";
     } else if (httpResponseCode == 200 || httpResponseCode == 201) {
-      Serial.println("🌱 [API CẢM BIẾN] Đã gửi Data thành công!");
+      Serial.println("[API CẢM BIẾN] Đã gửi Data thành công!");
     } else {
-      Serial.printf("❌ [API LỖI] Mã: %d\n", httpResponseCode);
+      Serial.printf("[API LỖI] Mã: %d\n", httpResponseCode);
     }
     
     http.end();
@@ -192,7 +192,7 @@ void checkPumpStatus() {
       
       if (response.indexOf("\"status\":\"ON\"") != -1 || response.indexOf("\"status\": \"ON\"") != -1) {
         if (!isPumpRunning) {
-          Serial.println("💧 [HỆ THỐNG] KÍCH HOẠT BẬT BƠM!");
+          Serial.println("[HỆ THỐNG] KÍCH HOẠT BẬT BƠM!");
           digitalWrite(RELAY_PIN, HIGH);
           digitalWrite(LED_PIN, HIGH);
           pumpStartTime = millis();
@@ -201,7 +201,7 @@ void checkPumpStatus() {
       } 
       else if (response.indexOf("\"status\":\"OFF\"") != -1 || response.indexOf("\"status\": \"OFF\"") != -1) {
         if (isPumpRunning) {
-          Serial.println("🛑 [HỆ THỐNG] TẮT BƠM");
+          Serial.println("[HỆ THỐNG] TẮT BƠM");
           digitalWrite(RELAY_PIN, LOW);
           digitalWrite(LED_PIN, LOW);
           isPumpRunning = false;
@@ -262,8 +262,8 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println(F("\n✅ [WIFI] Kết nối thành công!"));
-  Serial.print(F("🌐 IP Address: "));
+  Serial.println(F("\n[WIFI] Kết nối thành công!"));
+  Serial.print(F("IP Address: "));
   Serial.println(WiFi.localIP());
 
   while (JWT_TOKEN == "") {
@@ -275,7 +275,7 @@ void setup() {
 // ================= 8. VÒNG LẶP CHÍNH =================
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("⚠️ [WIFI] Mất kết nối! Đang thử kết nối lại...");
+    Serial.println("[WIFI] Mất kết nối! Đang thử kết nối lại...");
     WiFi.disconnect();
     WiFi.reconnect();
     
@@ -286,7 +286,7 @@ void loop() {
     }
     
     if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("\n✅ [WIFI] Đã kết nối lại thành công!");
+      Serial.println("\n[WIFI] Đã kết nối lại thành công!");
     } else {
       return; 
     }
@@ -303,7 +303,7 @@ void loop() {
   if (isCooldown) {
     if (currentMillis - cooldownStartTime >= COOLDOWN_DURATION) {
       isCooldown = false;
-      Serial.println("🔄 [HỆ THỐNG] Đã hết 3s chờ, tiếp tục nhận lệnh mới.");
+      Serial.println("[HỆ THỐNG] Đã hết 3s chờ, tiếp tục nhận lệnh mới.");
     }
   }
 
@@ -318,7 +318,7 @@ void loop() {
     digitalWrite(RELAY_PIN, LOW);   
     digitalWrite(LED_PIN, LOW);          
     isPumpRunning = false;
-    Serial.println("⏱️ [HỆ THỐNG] Đã hết 5 giây -> TỰ ĐỘNG TẮT BƠM");
+    Serial.println("[HỆ THỐNG] Đã hết 5 giây -> TỰ ĐỘNG TẮT BƠM");
     
     isCooldown = true;
     cooldownStartTime = currentMillis; 
@@ -349,7 +349,7 @@ void loop() {
       // Xóa dữ liệu cũ sau khi gửi xong để tránh gửi lại dữ liệu cũ nếu Slave chết
       latestSensorData = ""; 
     } else {
-      Serial.println("❌ [SLAVE CẢNH BÁO] Không có dữ liệu cảm biến mới!");
+      Serial.println("[SLAVE CẢNH BÁO] Không có dữ liệu cảm biến mới!");
       Serial.println("-> Vui lòng kiểm tra lại dây cắm RX(16)-TX(17) và code mạch Slave.");
     }
   }
